@@ -85,7 +85,8 @@ app.post('/profile', upload.single('avatar'), function (req, res, next) {
         },
         filename: function (req, file, cb) {
           const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
-          cb(null, file.fieldname + '-' + uniqueSuffix)
+          const ext = path.extname(file.originalname);
+          cb(null, file.fieldname + '-' + uniqueSuffix+ext)
         }
         })
     
@@ -97,6 +98,14 @@ app.use("/api/registerDoctor", require("./routes/doctorsDetails"));
 
 // Error handling middleware
 app.use(errorHandler);
+
+app.post('/upload', upload.single('image'), (req, res) => {
+    
+    res.render('image', { imageUrl: `/uploads/${req.file.filename}` });
+});
+app.get('/images', (req, res) => {
+    res.render('image'); // render image.hbs
+});
 
 app.listen(port, () => {
     console.log(`Server running on port http://localhost:${port}`);
