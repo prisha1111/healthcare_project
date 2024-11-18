@@ -1,112 +1,105 @@
-// const express = require("express");
-// const connectDb = require("./config/dbConnection");
-// const errorHandler = require("./middleware/errorHandler");
-// const cors = require("cors");
-// const dotenv = require("dotenv");
-// const hbs = require("hbs");
-// const userRoutes = require('./routes/userRoutes');
-
-// dotenv.config();
-// connectDb();
-
-// const app = express();
-// const port = process.env.PORT || 5000;
-
-// app.use(express.json());
-// app.use(cors());
-// app.use(errorHandler);
-//  // Route for user routes
-
-// app.use('/api',userRoutes);
-// app.set('view engine', 'hbs');
-// hbs.registerPartials(__dirname + '/views/partials');
-
-// app.get('/', (req, res) => res.send("Working"));
-// app.get("/home", (req, res) => res.render("home", {}));
-// app.get("/users", (req, res) => res.render("users", {}));
-
-// app.listen(port, () => {
-//     console.log(`Server running on http://localhost:${port}`);
-// });
-
-
-//FRAMEWORK CONFIGURATION
-const express = require('express');
-const connectDb = require("./config/dbConnection");
-const errorHandler = require("./middlewares/errorHandler");
+const express = require("express");
+const connectDb = require("./config/dbConnection.js");
+const errorHandler = require("./middleware/errorHandler");
 const cors = require("cors");
-const hbs = require("hbs");
-const path = require("path");
-const dotenv = require("dotenv");
-const multer=require("multer");
-const upload =multer({dest:'uploads/'});
+const path = require('path');
+const dotenv = require("dotenv").config();
+const multer = require('multer');
 
-dotenv.config();
 connectDb();
-
 const app = express();
-app.set('view engine', 'hbs');
 const port = process.env.PORT || 5000;
 
 app.use(express.json());
 app.use(cors());
+app.use(errorHandler);
+app.set('view engine', 'hbs');
+app.set('views', path.join(__dirname, 'views'));
+const hbs = require('hbs');
+hbs.registerPartials(path.join(__dirname, 'views/partials'));
 
-app.get('/', (req, res) => {
-    res.send("working");  
+// Serve static files from 'uploads' directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+let imageUrls = [];
+// Configure Multer storage
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads'); // Make sure 'uploads' folder exists
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
 });
 
+// Initialize Multer with disk storage configuration
+const upload = multer({ storage: storage });
+
+app.get('/', (req, res) => {
+    res.send("Working");
+});
+
+app.use("/api/newsletter", require("./routes/newsletterRoute"));
+app.use("/", require("./routes/userRoutes"))
+app.use('/api/users', require('./routes/UserRoutes'));
+app.use('/api/doctor', require('./routes/doctorDetailRoutes'));
+
 app.get('/home', (req, res) => {
-    res.render('home', {
-        username: "Galaxy",
-        posts: "flana dhimkana"
+    res.render("home", {
+        title: "Dynamic Home Page",
+        message: "Welcome to the dynamic home page!",
+        user: {
+            name: "John Doe",
+            age: 30
+        }
     });
 });
 
 app.get('/allusers', (req, res) => {
-    res.render('allusers', {
-        data: [{ name: "saksham", age: 20 },
-               { name: "prachi", age: 19 }]
+    const users = [
+        { name: "John Doe", age: 30, email: "johndoe@example.com", role: "Admin" },
+        { name: "Jane Smith", age: 25, email: "janesmith@example.com", role: "User" },
+        { name: "Alice Johnson", age: 28, email: "alicejohnson@example.com", role: "Moderator" }
+    ];
+    res.render('users', { users });
+});
+
+// Route for single file upload
+
+app.post("/profile", upload.single("avatar"), function (req, res, next) {
+    if (!req.file) {
+        return res.status(400).send("No file uploaded.");
+    }
+    console.log(req.body);
+    console.log(req.file);
+
+    const fileName = req.file.filename;
+    const imageUrl = `/uploads/${ fileName }`;
+    imageUrls.push(imageUrl);
+    return res.render("allimages", {
+        imageUrls: imageUrls
     });
 });
 
-
-app.post('/profile', upload.single('avatar'), function (req, res, next) {
-    // req.file is the `avatar` file
-    // req.body will hold the text fields, if there were any
-    console.log(req.body);
-    console.log(req.file);
-    return res.redirect("/home");
-
-    })
-
-    const storage = multer.diskStorage({
-        destination: function (req, file, cb) {
-          cb(null, "./uploads")
-        },
-        filename: function (req, file, cb) {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
-          const ext = path.extname(file.originalname);
-          cb(null, file.fieldname + '-' + uniqueSuffix+ext)
-        }
-        })
-    
-        const uploads = multer({ storage: storage })
-
-// Register routes
-app.use("/api/users", require("./routes/userRoutes")); // Use /api/users for both register and login
-app.use("/api/registerDoctor", require("./routes/doctorsDetails"));
-
-// Error handling middleware
-app.use(errorHandler);
-
-app.post('/upload', upload.single('image'), (req, res) => {
-    
-    res.render('image', { imageUrl: `/uploads/${req.file.filename}` });
+app.get("/allimages", (req, res) => {
+    const imageUrls = [];
+    res.render("allimages", { imageUrls: imageUrls });
 });
-app.get('/images', (req, res) => {
-    res.render('image'); // render image.hbs
+
+// Route for multiple file upload
+app.post('/photos/upload', upload.array('photos', 12), (req, res, next) => {
+    if (req.files && req.files.length > 0) {
+        console.log(req.files); // Log the uploaded files array
+        // Loop through the uploaded files and create URLs
+        const imageUrls = req.files.map(file => `/uploads/${file.filename}`);
+        // Pass the image URLs to the Handlebars view
+        return res.render("allimages", {
+            imageUrls: imageUrls
+        });
+    }
+    res.status(400).json({ message: "File upload failed" });
 });
 
 app.listen(port, () => {
-    console.log(`Server running on port http://localhost:${port}`);
+    console.log(`Server is running on http://localhost:${port}`);
 });
